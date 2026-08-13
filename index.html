@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3D web tests</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font:16px/1.5 system-ui,-apple-system,"Noto Sans TC",sans-serif;
+         background:#111; color:#eee; padding:24px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { margin:0 0 20px; color:#888; font-size:13px; }
+  ul { list-style:none; padding:0; margin:0; max-width:640px; }
+  li { margin:0 0 10px; }
+  a { display:block; padding:14px 16px; background:#1c1c1c; border:1px solid #2a2a2a;
+      border-radius:10px; color:#4da6ff; text-decoration:none; }
+  a:hover { background:#242424; }
+  .empty { color:#888; }
+</style>
+<h1>3D web tests</h1>
+<p class="sub">點任一項在此裝置開啟測試。新增 .html 檔並 push 後會自動出現。</p>
+<ul id="list"><li class="empty">載入中…</li></ul>
+<script>
+  const REPO = 'cao0085/3d-web-test';
+  const list = document.getElementById('list');
+  fetch(`https://api.github.com/repos/${REPO}/contents/`)
+    .then(r => r.json())
+    .then(files => {
+      const htmls = files
+        .filter(f => f.type === 'file' && /\.html?$/i.test(f.name) && f.name !== 'index.html')
+        .sort((a, b) => a.name.localeCompare(b.name));
+      if (!htmls.length) { list.innerHTML = '<li class="empty">尚無測試頁</li>'; return; }
+      list.innerHTML = htmls
+        .map(f => `<li><a href="./${f.name}">${f.name.replace(/\.html?$/i, '')}</a></li>`)
+        .join('');
+    })
+    .catch(() => { list.innerHTML = '<li class="empty">列表載入失敗（可稍後重整）</li>'; });
+</script>
