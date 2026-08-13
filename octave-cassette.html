@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OCTAVE — retextured cassette (6 effects)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Barlow+Condensed:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --paper:#EDE7D6; --ink:#17120F; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:#D9D2BE;color:var(--ink);font-family:"Barlow Condensed",system-ui,sans-serif;overflow:hidden}
+  #stage{position:fixed;inset:0}
+  canvas{display:block;width:100%;height:100%}
+  .vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 55%,rgba(23,18,15,.2) 100%);mix-blend-mode:multiply}
+  header{position:fixed;top:0;left:0;right:0;padding:22px 30px;display:flex;align-items:baseline;gap:14px;z-index:5}
+  h1{font-family:"Archivo Black",sans-serif;font-size:clamp(24px,4vw,42px);letter-spacing:-.03em;margin:0;line-height:.9}
+  .eyebrow{font-size:13px;letter-spacing:.22em;text-transform:uppercase;font-weight:600;transition:color .3s ease}
+  .credit{position:fixed;left:30px;top:74px;z-index:5;font-size:11px;letter-spacing:.06em;max-width:360px;opacity:.72;line-height:1.5}
+  .credit a{color:#0C6B62}
+
+  .dock{position:fixed;left:0;right:0;bottom:0;z-index:5;padding:0 30px 26px;display:flex;flex-direction:column;gap:12px;pointer-events:none}
+  .dock>*{pointer-events:auto}
+  .chips{display:flex;gap:10px;flex-wrap:wrap}
+  .chip{width:34px;height:34px;border:3px solid var(--ink);cursor:pointer;padding:0;border-radius:50%}
+  .chip[data-on="1"]{outline:3px solid var(--ink);outline-offset:3px}
+  .controls{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+  .transport{display:flex;gap:10px;flex-wrap:wrap}
+  button.tp{font-family:"Barlow Condensed",sans-serif;font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    padding:9px 16px 8px;border:2.5px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer;transition:transform .12s,background .12s,color .12s}
+  button.tp:hover{background:var(--ink);color:var(--paper)}
+  button.tp:active{transform:translate(2px,2px)}
+  button.tp[data-on="1"]{background:var(--ink);color:var(--paper)}
+  .meta{text-align:right;font-size:13px;letter-spacing:.14em;text-transform:uppercase;line-height:1.8}
+  #loader{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;font-size:15px;letter-spacing:.2em;text-transform:uppercase;background:#D9D2BE}
+  @media (max-width:640px){header{padding:16px 18px}.dock{padding:0 18px 18px}.credit{left:18px;top:60px}.meta{text-align:left}}
+</style>
+
+<div id="stage"></div>
+<div class="vignette"></div>
+<header>
+  <h1 id="name">octave</h1>
+  <span class="eyebrow" id="eyebrow">retextured glb · effect 01 / 06</span>
+</header>
+<div class="credit">
+  Geometry: <a href="https://skfb.ly/6QU7Y" target="_blank" rel="noopener">“Cassette Tape”</a> by joshtmc —
+  <a href="http://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>; label retextured.
+</div>
+
+<div class="dock">
+  <div class="chips" id="chips"></div>
+  <div class="controls">
+    <div class="transport">
+      <button class="tp" id="spin" data-on="1">auto-spin</button>
+      <button class="tp" id="reset">reset view</button>
+    </div>
+    <div class="meta">
+      <div id="cw">teal</div>
+      <div>drag rotate · scroll / pinch zoom</div>
+    </div>
+  </div>
+</div>
+<div id="loader">loading model <b id="pct">0%</b></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+// six effect slots -> colour variant files (rename freely per real effect later)
+const EFFECTS=[
+  {name:'teal',    hex:'#37ACA3'}, {name:'blue',   hex:'#3E86D6'},
+  {name:'indigo',  hex:'#7A5AD6'}, {name:'magenta',hex:'#D257A6'},
+  {name:'red',     hex:'#D65A4E'}, {name:'orange', hex:'#E0A030'},
+];
+const VDIR='cassette-tape/textures/variants/';
+
+const stage=document.getElementById('stage');
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+stage.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(30,1,.1,500);camera.position.set(0,.4,22);
+
+(function(){
+  const c=document.createElement('canvas');c.width=512;c.height=256;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,256);g.addColorStop(0,'#ffffff');g.addColorStop(.5,'#cbc5b6');g.addColorStop(1,'#33302a');
+  x.fillStyle=g;x.fillRect(0,0,512,256);x.fillStyle='#ffffff';x.fillRect(60,26,150,58);x.fillRect(330,36,110,44);
+  const tex=new THREE.CanvasTexture(c);tex.mapping=THREE.EquirectangularReflectionMapping;
+  const pm=new THREE.PMREMGenerator(renderer);scene.environment=pm.fromEquirectangular(tex).texture;
+})();
+scene.add(new THREE.HemisphereLight(0xfff5e4,0x4a453d,.7));
+const key=new THREE.DirectionalLight(0xffffff,1.35);key.position.set(6,9,10);scene.add(key);
+const fill=new THREE.DirectionalLight(0xffe4c0,.45);fill.position.set(-9,-2,6);scene.add(fill);
+const rim=new THREE.DirectionalLight(0xbfeee6,.55);rim.position.set(-4,4,-9);scene.add(rim);
+
+const pivot=new THREE.Group();scene.add(pivot);
+const texLoader=new THREE.TextureLoader();
+// window/tape cut-out comes from the model's opacity map (variants are JPG w/o alpha)
+const alphaTex=texLoader.load(VDIR.replace('variants/','')+'mat_tape_opacity.jpeg');
+alphaTex.flipY=false;
+const cache={};
+function variantTex(name){
+  if(cache[name]) return cache[name];
+  const t=texLoader.load(VDIR+'octave_'+name+'.jpg');
+  t.flipY=false;t.encoding=THREE.sRGBEncoding;t.anisotropy=8;
+  cache[name]=t;return t;
+}
+
+let tapeMat=null, active=0;
+const loaderEl=document.getElementById('loader'), pctEl=document.getElementById('pct');
+new THREE.GLTFLoader().load('cassette-tape/cassette_tape.glb', gltf=>{
+  const model=gltf.scene;
+  model.traverse(o=>{
+    if(!o.isMesh) return;
+    const m=o.material;
+    m.map=variantTex(EFFECTS[0].name);
+    m.alphaMap=alphaTex;                 // cut windows via opacity map
+    m.transparent=false;m.alphaTest=0.5;m.depthWrite=true;m.side=THREE.FrontSide;
+    m.needsUpdate=true;tapeMat=m;
+  });
+  const box=new THREE.Box3().setFromObject(model);
+  const size=box.getSize(new THREE.Vector3()), center=box.getCenter(new THREE.Vector3());
+  model.position.sub(center);
+  pivot.scale.setScalar(11/Math.max(size.x,size.y,size.z));
+  pivot.add(model);
+  loaderEl.style.display='none';
+}, xhr=>{ if(xhr.lengthComputable) pctEl.textContent=Math.round(xhr.loaded/xhr.total*100)+'%'; },
+   err=>{ loaderEl.textContent='failed to load model — check console'; console.error(err); });
+
+/* ---------- variant chips ---------- */
+const chipsEl=document.getElementById('chips');
+const nameEl=document.getElementById('name'), eyebrowEl=document.getElementById('eyebrow'), cwEl=document.getElementById('cw');
+EFFECTS.forEach((e,i)=>{
+  const b=document.createElement('button');b.className='chip';b.style.background=e.hex;b.title=e.name;
+  b.onclick=()=>setVariant(i);chipsEl.appendChild(b);e.chip=b;
+});
+function setVariant(i){
+  active=i;const e=EFFECTS[i];
+  if(tapeMat){tapeMat.map=variantTex(e.name);tapeMat.needsUpdate=true;}
+  cwEl.textContent=e.name;eyebrowEl.textContent='retextured glb · effect '+String(i+1).padStart(2,'0')+' / 06';
+  eyebrowEl.style.color=e.hex;
+  EFFECTS.forEach((x,j)=>x.chip.dataset.on=j===i?'1':'0');
+}
+
+/* ---------- interaction ---------- */
+let targetRY=-.5,targetRX=.22,curRY=-.5,curRX=.22,dist=22,autoSpin=true,dragging=false,px=0,py=0;
+const el=renderer.domElement;el.style.cursor='grab';el.style.touchAction='none';
+const clampDist=d=>Math.max(12,Math.min(42,d));
+const pointers=new Map();let pinchStart=0,pinchDist=dist;
+const pinchGap=()=>{const p=[...pointers.values()];return Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);};
+el.addEventListener('pointerdown',e=>{el.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size===1){dragging=true;px=e.clientX;py=e.clientY;el.style.cursor='grabbing';}
+  else if(pointers.size===2){dragging=false;pinchStart=pinchGap();pinchDist=dist;}});
+el.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size>=2){const r=pinchStart>0?pinchGap()/pinchStart:1;dist=clampDist(pinchDist/r);return;}
+  if(!dragging)return;targetRY+=(e.clientX-px)*.007;targetRX=Math.max(-1.2,Math.min(1.2,targetRX+(e.clientY-py)*.006));px=e.clientX;py=e.clientY;});
+function endP(e){pointers.delete(e.pointerId);if(pointers.size<2)dragging=false;
+  if(pointers.size===1){const p=[...pointers.values()][0];dragging=true;px=p.x;py=p.y;}el.style.cursor='grab';}
+el.addEventListener('pointerup',endP);el.addEventListener('pointercancel',endP);
+el.addEventListener('wheel',e=>{e.preventDefault();dist=clampDist(dist+e.deltaY*.02)},{passive:false});
+
+const spinBtn=document.getElementById('spin');
+spinBtn.onclick=()=>{autoSpin=!autoSpin;spinBtn.dataset.on=autoSpin?'1':'0';};
+document.getElementById('reset').onclick=()=>{targetRX=.22;targetRY=-.5;dist=22;};
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+setVariant(0);
+
+const clock=new THREE.Clock();
+(function frame(){
+  requestAnimationFrame(frame);
+  const dt=Math.min(clock.getDelta(),.05);
+  if(autoSpin && !dragging && !reduce) targetRY+=dt*.3;
+  curRY+=(targetRY-curRY)*.09;curRX+=(targetRX-curRX)*.09;
+  pivot.rotation.y=curRY;pivot.rotation.x=curRX;
+  pivot.position.y=Math.sin(clock.elapsedTime*.7)*.15;
+  camera.position.z+=(dist-camera.position.z)*.08;
+  renderer.render(scene,camera);
+})();
+</script>
