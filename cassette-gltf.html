@@ -96,6 +96,20 @@ const loaderEl=document.getElementById('loader'), pctEl=document.getElementById(
 new THREE.GLTFLoader().load('cassette-tape/cassette_tape.glb',
   gltf=>{
     model=gltf.scene;
+    // The Sketchfab material is alphaMode:BLEND for the whole cassette, which wrecks
+    // depth-sorting (reels bleed through, mirrored label, a "floating" reel).
+    // The opacity map is really a cut-out, so switch BLEND -> alpha-test cutout.
+    model.traverse(o=>{
+      if(!o.isMesh) return;
+      const mats=Array.isArray(o.material)?o.material:[o.material];
+      mats.forEach(m=>{
+        if(m.transparent || m.alphaMap || (m.map&&m.map.image)){
+          m.transparent=false; m.alphaTest=0.5; m.depthWrite=true;
+        }
+        m.side=THREE.FrontSide;                     // stop back-face overdraw
+        m.needsUpdate=true;
+      });
+    });
     const box=new THREE.Box3().setFromObject(model);
     const size=box.getSize(new THREE.Vector3()), center=box.getCenter(new THREE.Vector3());
     model.position.sub(center);                     // centre at origin
