@@ -136,63 +136,74 @@ function condensed(ctx,text,x,y,size,squeeze,color){
 }
 
 function labelTexture(side){
+  const a=side==='a';
   const W=1560,H=400,c=document.createElement('canvas');
   c.width=W;c.height=H;const ctx=c.getContext('2d');
-  const hot  = side==='a'?FLAME:FUCHSIA;
-  const cool = side==='a'?DEEP:ACID;
+  const hot=a?FLAME:FUCHSIA, cool=a?DEEP:ACID, big=a?'A':'B';
+  const type1=a?'NORMAL POSITION':'CrO₂ POSITION';
+  const type2=a?'TYPE I · IEC I · 120µs':'TYPE II · IEC II · 70µs';
+  const tracks=a
+    ?[['1','ROOM TONE','0:00'],['2','LATE SET','9:40'],['3','BLUE HOUR','19:05']]
+    :[['1','WET RETURN','0:00'],['2','NIGHT BUS','8:12'],['3','SLOW TIDE','17:30']];
 
-  ctx.fillStyle=PAPER;ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=PAPER;ctx.fillRect(0,0,W,H);ctx.textBaseline='alphabetic';
 
-  // ink pass — drawn twice, opposite offsets, multiply = overprint fringes
-  const art=(col,dx,dy)=>{
-    ctx.save();ctx.translate(dx,dy);
-    ctx.globalCompositeOperation='multiply';
-    ctx.fillStyle=col;
+  // top brand band — riso overprint
+  const band=(col,dx,dy)=>{ctx.save();ctx.translate(dx,dy);ctx.globalCompositeOperation='multiply';ctx.fillStyle=col;ctx.fillRect(0,0,W,64);ctx.restore();};
+  band(hot,-5,-3);band(cool,5,4);
+  ctx.globalCompositeOperation='source-over';ctx.fillStyle=PAPER;
+  ctx.font='700 40px "Barlow Condensed", sans-serif';ctx.fillText('ACID AUDIO',40,46);
+  ctx.textAlign='right';ctx.font='600 34px "Barlow Condensed", sans-serif';ctx.fillText('C-90',W-40,46);ctx.textAlign='left';
 
-    ctx.fillRect(0,0,W,70);                                 // top band
-    ctx.beginPath();ctx.arc(1230,250,142,0,6.3);ctx.fill(); // sun
-    ctx.beginPath();                                        // wedge
-    ctx.moveTo(910,H);ctx.lineTo(1090,70);ctx.lineTo(1215,70);ctx.lineTo(1035,H);ctx.closePath();ctx.fill();
-    ctx.fillRect(58,380,430,14);                            // baseline rule
-    ctx.restore();
-  };
-  art(hot,-7,-5);
-  art(cool,6,7);
+  // side-indicator square (overprint) + big letter
+  const sq=(col,dx,dy)=>{ctx.save();ctx.translate(dx,dy);ctx.globalCompositeOperation='multiply';ctx.fillStyle=col;ctx.fillRect(46,100,140,140);ctx.restore();};
+  sq(hot,-5,-4);sq(cool,5,5);
+  ctx.globalCompositeOperation='source-over';ctx.fillStyle=PAPER;
+  ctx.font='800 120px "Archivo Black", Impact, sans-serif';ctx.textAlign='center';
+  ctx.fillText(big,116,222);ctx.textAlign='left';
 
-  ctx.globalCompositeOperation='multiply';
-  halftone(ctx,620,70,300,H-70,cool,11,3.2);
-  halftone(ctx,1088,250,142,H-250,hot,9,2.4);
+  // SIDE wordmark — overprint
+  ctx.globalCompositeOperation='multiply';condensed(ctx,'SIDE '+big,220,178,80,.82,cool);
+  ctx.globalCompositeOperation='source-over';condensed(ctx,'SIDE '+big,214,174,80,.82,INK);
 
-  // display type — two ink passes, offset, so the letters overprint too
-  const lines=(col,dx,dy,op)=>{
-    ctx.globalCompositeOperation=op;
-    condensed(ctx,'ACID',58+dx,200+dy,140,.8,col);
-    condensed(ctx,'TAPE',58+dx,318+dy,140,.8,col);
-  };
-  lines(cool,7,6,'multiply');
-  lines(INK,0,0,'source-over');
-
-  // band + footer text
-  ctx.globalCompositeOperation='source-over';
-  ctx.fillStyle=PAPER;
-  ctx.font='600 38px "Barlow Condensed", sans-serif';
-  ctx.fillText('SIDE '+side.toUpperCase()+'   ·   '+(side==='a'?'DRY / BYPASS':'WET / ENGAGED'),58,50);
-  ctx.textAlign='right';ctx.fillText('C-90',W-58,50);ctx.textAlign='left';
+  // tape type + dolby mark
+  ctx.fillStyle=INK;ctx.font='600 30px "Barlow Condensed", sans-serif';ctx.fillText(type1,216,218);
+  ctx.fillStyle=cool;ctx.font='600 24px "Barlow Condensed", sans-serif';ctx.fillText(type2,216,248);
   ctx.fillStyle=INK;
+  ctx.beginPath();ctx.moveTo(216,286);ctx.lineTo(240,274);ctx.lineTo(240,298);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(268,274);ctx.lineTo(268,298);ctx.lineTo(244,286);ctx.closePath();ctx.fill();
+  ctx.font='600 24px "Barlow Condensed", sans-serif';ctx.fillText('DOLBY  B  NR',284,296);
+
+  // running index (right) — position ruler + numbered tracks
+  const rx=650, rw=W-rx-46, ry=142;
+  ctx.fillStyle=INK;ctx.font='600 22px "Barlow Condensed", sans-serif';ctx.fillText('RUNNING INDEX',rx,110);
+  ctx.strokeStyle=INK;ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(rx,ry);ctx.lineTo(rx+rw,ry);ctx.stroke();
+  for(let m=0;m<=6;m++){
+    const x=rx+rw*m/6, big2=m%2===0;
+    ctx.beginPath();ctx.moveTo(x,ry);ctx.lineTo(x,ry-(big2?14:8));ctx.stroke();
+    if(big2){ctx.textAlign='center';ctx.fillText(String(m*15),x,ry-20);ctx.textAlign='left';}
+  }
+  ctx.globalCompositeOperation='multiply';halftone(ctx,rx,ry+8,rw,22,cool,10,2.6);ctx.globalCompositeOperation='source-over';
+
   ctx.font='600 30px "Barlow Condensed", sans-serif';
-  ctx.fillText('01  ROOM TONE      02  LATE SET      03  BLUE HOUR',58,368);
+  tracks.forEach((t,i)=>{
+    const y=214+i*52;
+    ctx.fillStyle=hot;ctx.fillText(t[0],rx,y);
+    ctx.fillStyle=INK;ctx.fillText(t[1],rx+40,y);
+    ctx.textAlign='right';ctx.fillStyle=cool;ctx.fillText(t[2],rx+rw,y);ctx.textAlign='left';
+    ctx.fillStyle=INK;
+    for(let dx=rx+52+ctx.measureText(t[1]).width; dx<rx+rw-72; dx+=14) ctx.fillRect(dx,y-7,4,4);
+  });
+
+  ctx.fillStyle=INK;ctx.fillRect(40,378,W-80,6);   // bottom rule
 
   // paper grain
   const img=ctx.getImageData(0,0,W,H),d=img.data;
-  for(let i=0;i<d.length;i+=4){
-    const n=(Math.random()-.5)*26;
-    d[i]+=n;d[i+1]+=n;d[i+2]+=n;
-  }
+  for(let i=0;i<d.length;i+=4){const n=(Math.random()-.5)*26;d[i]+=n;d[i+1]+=n;d[i+2]+=n;}
   ctx.putImageData(img,0,0);
 
-  const t=new THREE.CanvasTexture(c);
-  t.anisotropy=8;
-  return t;
+  const t=new THREE.CanvasTexture(c);t.anisotropy=8;return t;
 }
 
 /* ---------- scene ---------- */
@@ -310,12 +321,43 @@ const darkMat=new THREE.MeshStandardMaterial({color:0x0B0908,roughness:.8});
 const feltMat=new THREE.MeshStandardMaterial({color:0xC9B7A6,roughness:1});
 const metalMat=new THREE.MeshStandardMaterial({color:0x9A9488,roughness:.35,metalness:.9});
 
+// winding face-disc: geometry rebuilt to current radius while UV stays pinned to
+// physical radius, so shrinking a reel drops its OUTER wraps (not compress all)
+const PACK_MAX=2.06;
+function windDisc(){
+  const N=56, geo=new THREE.BufferGeometry();
+  const pos=new Float32Array((N+2)*3), uv=new Float32Array((N+2)*2), idx=[];
+  const dir=[];
+  for(let i=0;i<=N;i++){const ang=i/N*Math.PI*2;dir.push([Math.cos(ang),Math.sin(ang)]);}
+  for(let i=0;i<N;i++) idx.push(0,i+1,i+2>N?1:i+2);
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('uv',new THREE.BufferAttribute(uv,2));
+  geo.setIndex(idx);
+  const set=r=>{
+    pos[0]=0;pos[1]=0;pos[2]=0;uv[0]=.5;uv[1]=.5;
+    for(let i=0;i<=N;i++){
+      const p=(i+1)*3, q=(i+1)*2, dx=dir[i][0], dy=dir[i][1];
+      pos[p]=dx*r;pos[p+1]=dy*r;pos[p+2]=0;
+      uv[q]=dx*.5*r/PACK_MAX+.5;uv[q+1]=dy*.5*r/PACK_MAX+.5;
+    }
+    geo.attributes.position.needsUpdate=true;geo.attributes.uv.needsUpdate=true;
+    geo.computeVertexNormals();
+  };
+  set(PACK_MAX);
+  return {geo,set};
+}
+
 const spools=[];
 [-1,1].forEach(dir=>{
   const g=new THREE.Group();
   g.position.set(dir*REEL_X,REEL_Y,0);
-  const pack=new THREE.Mesh(new THREE.CylinderGeometry(1,1,.42,48),packMat);
-  pack.rotation.x=Math.PI/2;g.add(pack);
+  // thin dark side wall of the wound pack (scaled with radius)
+  const side=new THREE.Mesh(new THREE.CylinderGeometry(1,1,.42,48,1,true),brown);
+  side.rotation.x=Math.PI/2;g.add(side);
+  // wound-tape faces, front (+z) and back (-z), physically correct radius
+  const fd=windDisc(), bd=windDisc();
+  const front=new THREE.Mesh(fd.geo,packMat);front.position.z=.21;g.add(front);
+  const back=new THREE.Mesh(bd.geo,packMat);back.position.z=-.21;back.rotation.y=Math.PI;g.add(back);
   const hub=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.66,26),hubMat);
   hub.rotation.x=Math.PI/2;g.add(hub);
   for(let i=0;i<6;i++){
@@ -323,7 +365,8 @@ const spools=[];
     t.position.set(Math.cos(i/6*6.283)*.58,Math.sin(i/6*6.283)*.58,0);
     g.add(t);
   }
-  tape.add(g);spools.push({g,pack});
+  tape.add(g);
+  spools.push({g,setR(r){fd.set(r);bd.set(r);side.scale.set(r,1,r);}});
 });
 
 // ---- bottom working edge: head window, felt pad, capstans, guide rollers, tape ----
@@ -439,8 +482,8 @@ function frame(){
   const area=rMax*rMax-rMin*rMin;
   const rL=Math.sqrt(rMax*rMax-area*pos);
   const rR=Math.sqrt(rMin*rMin+area*pos);
-  spools[0].pack.scale.set(rL,1,rL);
-  spools[1].pack.scale.set(rR,1,rR);
+  spools[0].setR(rL);
+  spools[1].setR(rR);
   if(playing && !reduce){
     spools[0].g.rotation.z-=dt*3.4/rL;
     spools[1].g.rotation.z-=dt*3.4/rR;
