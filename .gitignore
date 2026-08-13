@@ -1,6 +1,6 @@
 .DS_Store
 
-# large model extras not needed by the web page (glb has embedded textures)
+# usdz is Apple-AR only — not used by the web page or for editing
 cassette-tape/*.usdz
-cassette-tape/source/
-cassette-tape/textures/
+# NOTE: textures/ and source/ are tracked on purpose — they are the editable
+# masters for retexturing this import template. See cassette-tape/MODEL.md
