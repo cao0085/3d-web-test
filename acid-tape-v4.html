@@ -289,8 +289,22 @@ const labels={};
   labels[s]=mat;tape.add(m);
 });
 
+// wound-tape texture — concentric layers you see through the reel windows
+function packTexture(){
+  const S=256,c=document.createElement('canvas');c.width=c.height=S;
+  const ctx=c.getContext('2d');const cx=S/2,cy=S/2;
+  ctx.fillStyle='#3A2416';ctx.fillRect(0,0,S,S);
+  for(let r=S/2;r>18;r-=1){
+    const shade=44+Math.sin(r*.55)*10+Math.sin(r*.13)*7+(Math.random()-.5)*8;
+    ctx.strokeStyle='rgb('+(shade+20|0)+','+(shade|0)+','+(shade-14|0)+')';
+    ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(cx,cy,r,0,6.283);ctx.stroke();
+  }
+  const t=new THREE.CanvasTexture(c);t.anisotropy=8;return t;
+}
 // mechanism materials
 const brown=new THREE.MeshStandardMaterial({color:0x4A2E1C,roughness:.95});
+const packMat=new THREE.MeshStandardMaterial({map:packTexture(),roughness:.82,metalness:0});
+const tapeMat=new THREE.MeshStandardMaterial({color:0x120B07,roughness:.32,metalness:.15}); // glossy tape
 const hubMat=new THREE.MeshStandardMaterial({color:0xE8E2D2,roughness:.55});
 const darkMat=new THREE.MeshStandardMaterial({color:0x0B0908,roughness:.8});
 const feltMat=new THREE.MeshStandardMaterial({color:0xC9B7A6,roughness:1});
@@ -300,7 +314,7 @@ const spools=[];
 [-1,1].forEach(dir=>{
   const g=new THREE.Group();
   g.position.set(dir*REEL_X,REEL_Y,0);
-  const pack=new THREE.Mesh(new THREE.CylinderGeometry(1,1,.42,48),brown);
+  const pack=new THREE.Mesh(new THREE.CylinderGeometry(1,1,.42,48),packMat);
   pack.rotation.x=Math.PI/2;g.add(pack);
   const hub=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.66,26),hubMat);
   hub.rotation.x=Math.PI/2;g.add(hub);
@@ -325,7 +339,7 @@ felt.position.set(0,-2.15,.22);tape.add(felt);
   const r=new THREE.Mesh(new THREE.CylinderGeometry(.2,.2,.6,18),metalMat);
   r.rotation.x=Math.PI/2;r.position.set(x,-2.4,.2);tape.add(r);
 });
-const strip=new THREE.Mesh(new THREE.BoxGeometry(6.8,.12,.03),brown);  // exposed tape
+const strip=new THREE.Mesh(new THREE.BoxGeometry(6.8,.12,.03),tapeMat);  // exposed tape
 strip.position.set(0,-2.55,.34);tape.add(strip);
 
 // write-protect tab knockouts, top-back corners
