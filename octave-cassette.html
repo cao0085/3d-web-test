@@ -101,7 +101,7 @@ const texLoader=new THREE.TextureLoader();
 // window/tape cut-out comes from the model's opacity map (variants are JPG w/o alpha)
 // NOTE: the glb's embedded baseColor is vertically flipped vs the loose source
 // textures, so our replacement maps need flipY=true to match the model's UVs.
-const VER='?v=3';                        // bump to bust texture cache after edits
+const VER='?v=2';                        // bump to bust texture cache after edits
 const alphaTex=texLoader.load(VDIR.replace('variants/','')+'mat_tape_opacity.jpeg'+VER);
 alphaTex.flipY=true;
 const cache={};
