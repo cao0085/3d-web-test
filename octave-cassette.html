@@ -99,13 +99,15 @@ const rim=new THREE.DirectionalLight(0xbfeee6,.55);rim.position.set(-4,4,-9);sce
 const pivot=new THREE.Group();scene.add(pivot);
 const texLoader=new THREE.TextureLoader();
 // window/tape cut-out comes from the model's opacity map (variants are JPG w/o alpha)
+// NOTE: the glb's embedded baseColor is vertically flipped vs the loose source
+// textures, so our replacement maps need flipY=true to match the model's UVs.
 const alphaTex=texLoader.load(VDIR.replace('variants/','')+'mat_tape_opacity.jpeg');
-alphaTex.flipY=false;
+alphaTex.flipY=true;
 const cache={};
 function variantTex(name){
   if(cache[name]) return cache[name];
   const t=texLoader.load(VDIR+'octave_'+name+'.jpg');
-  t.flipY=false;t.encoding=THREE.sRGBEncoding;t.anisotropy=8;
+  t.flipY=true;t.encoding=THREE.sRGBEncoding;t.anisotropy=8;
   cache[name]=t;return t;
 }
 
