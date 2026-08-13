@@ -117,7 +117,7 @@ function labelTexture(side,pal){
   // thin inner border
   ctx.strokeStyle=pal.ink;ctx.globalAlpha=.25;ctx.lineWidth=3;roundRectPath(ctx,20,20,W2-40,H2-40,34);ctx.stroke();ctx.globalAlpha=1;
 
-  const t=new THREE.CanvasTexture(c);t.anisotropy=8;return t;
+  const t=new THREE.CanvasTexture(c);t.anisotropy=8;t.encoding=THREE.sRGBEncoding;return t;
 }
 
 /* ---------- scene ---------- */
@@ -158,11 +158,11 @@ const shell=roundedRect(W,H,.42);
 [-REEL_X,REEL_X].forEach(cx=>{const h=new THREE.Path();h.absarc(cx,REEL_Y,WIN_R,0,Math.PI*2,false);shell.holes.push(h);});
 const shellGeo=new THREE.ExtrudeGeometry(shell,{depth:D,bevelEnabled:true,bevelThickness:.05,bevelSize:.05,bevelSegments:2,curveSegments:26});
 shellGeo.translate(0,0,-D/2);
-const shellMat=new THREE.MeshPhysicalMaterial({color:0x161514,metalness:0,roughness:.34,clearcoat:.55,clearcoatRoughness:.28,envMapIntensity:.85});
+const shellMat=new THREE.MeshPhysicalMaterial({color:0x121110,metalness:0,roughness:.5,clearcoat:.2,clearcoatRoughness:.4,envMapIntensity:.3});
 tape.add(new THREE.Mesh(shellGeo,shellMat));
 
 // materials
-const brown=new THREE.MeshStandardMaterial({color:0x3A2416,roughness:.9});
+const brown=new THREE.MeshStandardMaterial({color:0x5A3A22,roughness:.9});
 const tapeMat=new THREE.MeshStandardMaterial({color:0x140C08,roughness:.4,metalness:.1});
 const hubMat=new THREE.MeshStandardMaterial({color:0xF3F0E6,roughness:.5});
 const darkMat=new THREE.MeshStandardMaterial({color:0x0B0908,roughness:.85});
@@ -182,8 +182,8 @@ const spools=[];
 });
 
 // centre viewing window: tape span + felt pad (seen through label cut-out)
-const midTape=new THREE.Mesh(new THREE.BoxGeometry(1.7,.5,.05),tapeMat);midTape.position.set(0,REEL_Y,.44);tape.add(midTape);
-const midFelt=new THREE.Mesh(new THREE.BoxGeometry(1.2,.55,.08),feltMat);midFelt.position.set(0,REEL_Y,.30);tape.add(midFelt);
+const midTape=new THREE.Mesh(new THREE.BoxGeometry(1.7,.5,.05),tapeMat);midTape.position.set(0,REEL_Y,.72);tape.add(midTape);
+const midFelt=new THREE.Mesh(new THREE.BoxGeometry(1.2,.55,.08),feltMat);midFelt.position.set(0,REEL_Y,.69);tape.add(midFelt);
 
 // bottom working edge
 const headFrame=new THREE.Mesh(new THREE.BoxGeometry(1.8,.85,.5),darkMat);headFrame.position.set(0,-2.45,.42);tape.add(headFrame);
@@ -200,7 +200,7 @@ const labelMats={};
 ['a','b'].forEach((s,i)=>{
   const mat=new THREE.MeshStandardMaterial({map:labelTexture(s,PALETTES[0]),transparent:true,alphaTest:.5,roughness:.85,metalness:0});
   const m=new THREE.Mesh(new THREE.PlaneGeometry(LW,LH),mat);
-  m.position.set(0,LCY,(i?-1:1)*(D/2+.02));if(i)m.rotation.y=Math.PI;
+  m.position.set(0,LCY,(i?-1:1)*(D/2+.12));if(i)m.rotation.y=Math.PI;
   labelMats[s]=mat;tape.add(m);
 });
 function applyPalette(){
