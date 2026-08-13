@@ -1,0 +1,409 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>acid tape — webgl cassette study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Barlow+Condensed:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EFE2C6;
+    --ink:#17120F;
+    --flame:#F2451D;
+    --acid:#E8B426;
+    --deep:#0C6B62;
+    --fuchsia:#E0357E;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Barlow Condensed",system-ui,sans-serif;
+    overflow:hidden;
+  }
+  #stage{position:fixed;inset:0}
+  canvas{display:block;width:100%;height:100%}
+
+  .grain,.halftone{position:fixed;inset:0;pointer-events:none}
+  .grain{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='11'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.85 -0.24'/></filter><rect width='220' height='220' filter='url(%23n)'/></svg>");
+    mix-blend-mode:multiply;opacity:.38;
+  }
+  .halftone{
+    background-image:radial-gradient(var(--ink) 22%,transparent 23%);
+    background-size:4px 4px;
+    mix-blend-mode:multiply;opacity:.07;
+  }
+  .vignette{
+    position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 45%,transparent 45%,rgba(23,18,15,.22) 100%);
+    mix-blend-mode:multiply;
+  }
+
+  header{
+    position:fixed;top:0;left:0;right:0;padding:22px 30px;
+    display:flex;align-items:baseline;gap:14px;z-index:5;
+  }
+  h1{
+    font-family:"Archivo Black",sans-serif;
+    font-size:clamp(26px,4.4vw,46px);
+    letter-spacing:-.03em;margin:0;line-height:.9;
+    transform:scaleX(.86);transform-origin:left;
+  }
+  .eyebrow{
+    font-size:13px;letter-spacing:.22em;text-transform:uppercase;
+    font-weight:600;color:var(--flame);
+  }
+  .rule{position:fixed;top:78px;left:30px;right:30px;height:5px;background:var(--ink);z-index:5}
+
+  .panel{
+    position:fixed;left:30px;bottom:30px;z-index:5;
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+  }
+  button{
+    font-family:"Barlow Condensed",sans-serif;
+    font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    padding:9px 18px 8px;border:2.5px solid var(--ink);background:transparent;
+    color:var(--ink);cursor:pointer;border-radius:0;
+    transition:transform .12s ease,background .12s ease,color .12s ease;
+  }
+  button:hover{background:var(--ink);color:var(--paper)}
+  button:active{transform:translate(2px,2px)}
+  button[data-on="1"]{background:var(--flame);border-color:var(--flame);color:var(--paper)}
+  button:focus-visible{outline:3px solid var(--deep);outline-offset:3px}
+
+  .meta{
+    position:fixed;right:30px;bottom:30px;z-index:5;text-align:right;
+    font-size:13px;letter-spacing:.16em;text-transform:uppercase;line-height:1.9;
+  }
+  .meta b{font-weight:600;color:var(--flame)}
+  .counter{font-variant-numeric:tabular-nums}
+
+  @media (max-width:640px){
+    header{padding:16px 18px}
+    .rule{top:64px;left:18px;right:18px}
+    .panel{left:18px;bottom:18px}
+    .meta{right:18px;bottom:74px}
+  }
+  @media (prefers-reduced-motion:reduce){button{transition:none}}
+</style>
+
+<div id="stage"></div>
+<div class="halftone"></div>
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<header>
+  <h1>acid tape</h1>
+  <span class="eyebrow">webgl study 01</span>
+</header>
+<div class="rule"></div>
+
+<div class="panel">
+  <button id="flip">flip side</button>
+  <button id="play">play</button>
+  <button id="reset">reset view</button>
+</div>
+
+<div class="meta">
+  <div>side <b id="sideLabel">a</b> — <span id="mode">dry</span></div>
+  <div class="counter" id="time">00:00 / 30:00</div>
+  <div>drag to rotate · scroll / pinch to zoom</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const PAPER='#EFE2C6', FLAME='#F2451D', ACID='#E8B426', DEEP='#0C6B62', FUCHSIA='#E0357E', INK='#17120F';
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- riso label painting ---------- */
+function halftone(ctx,x,y,w,h,color,step,r){
+  ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
+  ctx.fillStyle=color;
+  for(let j=y;j<y+h;j+=step){
+    for(let i=x;i<x+w;i+=step){
+      ctx.beginPath();ctx.arc(i+(j/step%2?step/2:0),j,r,0,6.3);ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+function condensed(ctx,text,x,y,size,squeeze,color){
+  ctx.save();ctx.translate(x,y);ctx.scale(squeeze,1);
+  ctx.font=size+'px "Archivo Black", Impact, sans-serif';
+  ctx.fillStyle=color;ctx.textBaseline='alphabetic';
+  ctx.fillText(text,0,0);ctx.restore();
+}
+
+function labelTexture(side){
+  const W=1560,H=400,c=document.createElement('canvas');
+  c.width=W;c.height=H;const ctx=c.getContext('2d');
+  const hot  = side==='a'?FLAME:FUCHSIA;
+  const cool = side==='a'?DEEP:ACID;
+
+  ctx.fillStyle=PAPER;ctx.fillRect(0,0,W,H);
+
+  // ink pass — drawn twice, opposite offsets, multiply = overprint fringes
+  const art=(col,dx,dy)=>{
+    ctx.save();ctx.translate(dx,dy);
+    ctx.globalCompositeOperation='multiply';
+    ctx.fillStyle=col;
+
+    ctx.fillRect(0,0,W,70);                                 // top band
+    ctx.beginPath();ctx.arc(1230,250,142,0,6.3);ctx.fill(); // sun
+    ctx.beginPath();                                        // wedge
+    ctx.moveTo(910,H);ctx.lineTo(1090,70);ctx.lineTo(1215,70);ctx.lineTo(1035,H);ctx.closePath();ctx.fill();
+    ctx.fillRect(58,380,430,14);                            // baseline rule
+    ctx.restore();
+  };
+  art(hot,-7,-5);
+  art(cool,6,7);
+
+  ctx.globalCompositeOperation='multiply';
+  halftone(ctx,620,70,300,H-70,cool,11,3.2);
+  halftone(ctx,1088,250,142,H-250,hot,9,2.4);
+
+  // display type — two ink passes, offset, so the letters overprint too
+  const lines=(col,dx,dy,op)=>{
+    ctx.globalCompositeOperation=op;
+    condensed(ctx,'ACID',58+dx,200+dy,140,.8,col);
+    condensed(ctx,'TAPE',58+dx,318+dy,140,.8,col);
+  };
+  lines(cool,7,6,'multiply');
+  lines(INK,0,0,'source-over');
+
+  // band + footer text
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle=PAPER;
+  ctx.font='600 38px "Barlow Condensed", sans-serif';
+  ctx.fillText('SIDE '+side.toUpperCase()+'   ·   '+(side==='a'?'DRY / BYPASS':'WET / ENGAGED'),58,50);
+  ctx.textAlign='right';ctx.fillText('C-90',W-58,50);ctx.textAlign='left';
+  ctx.fillStyle=INK;
+  ctx.font='600 30px "Barlow Condensed", sans-serif';
+  ctx.fillText('01  ROOM TONE      02  LATE SET      03  BLUE HOUR',58,368);
+
+  // paper grain
+  const img=ctx.getImageData(0,0,W,H),d=img.data;
+  for(let i=0;i<d.length;i+=4){
+    const n=(Math.random()-.5)*26;
+    d[i]+=n;d[i+1]+=n;d[i+2]+=n;
+  }
+  ctx.putImageData(img,0,0);
+
+  const t=new THREE.CanvasTexture(c);
+  t.anisotropy=8;
+  return t;
+}
+
+/* ---------- scene ---------- */
+const stage=document.getElementById('stage');
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.05;
+stage.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(30,1,.1,200);
+camera.position.set(0,.6,26);
+
+// procedural studio environment for plastic reflections
+(function(){
+  const c=document.createElement('canvas');c.width=512;c.height=256;
+  const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,256);
+  g.addColorStop(0,'#ffffff');g.addColorStop(.45,'#c9c3b4');g.addColorStop(1,'#2b2622');
+  x.fillStyle=g;x.fillRect(0,0,512,256);
+  x.fillStyle='#ffffff';x.fillRect(40,20,180,70);x.fillRect(320,30,120,50);
+  x.fillStyle='rgba(242,69,29,.5)';x.fillRect(230,120,90,60);
+  const tex=new THREE.CanvasTexture(c);
+  tex.mapping=THREE.EquirectangularReflectionMapping;
+  const pmrem=new THREE.PMREMGenerator(renderer);
+  scene.environment=pmrem.fromEquirectangular(tex).texture;
+})();
+
+scene.add(new THREE.HemisphereLight(0xfff3dd,0x3a3028,.55));
+const key=new THREE.DirectionalLight(0xffffff,1.45);key.position.set(6,9,11);scene.add(key);
+const fill=new THREE.DirectionalLight(0xffd9a8,.5);fill.position.set(-9,-3,6);scene.add(fill);
+const rim=new THREE.DirectionalLight(0x8ae0d4,.85);rim.position.set(-5,4,-9);scene.add(rim);
+
+/* ---------- cassette geometry (1 unit = 10 mm) ---------- */
+const tape=new THREE.Group();scene.add(tape);
+const W=10.05,H=6.38,D=1.25;
+
+function roundedRect(w,h,r,Cls){
+  const s=new (Cls||THREE.Shape)();
+  const x=-w/2,y=-h/2;
+  s.moveTo(x+r,y);
+  s.lineTo(x+w-r,y);   s.absarc(x+w-r,y+r,r,-Math.PI/2,0);
+  s.lineTo(x+w,y+h-r); s.absarc(x+w-r,y+h-r,r,0,Math.PI/2);
+  s.lineTo(x+r,y+h);   s.absarc(x+r,y+h-r,r,Math.PI/2,Math.PI);
+  s.lineTo(x,y+r);     s.absarc(x+r,y+r,r,Math.PI,Math.PI*1.5);
+  return s;
+}
+
+const shell=roundedRect(W,H,.42);
+// window opening, nudged below centre
+const winShifted=new THREE.Path();
+(function(){
+  const pts=roundedRect(5.7,2.15,.3,THREE.Path).getPoints(60);
+  winShifted.moveTo(pts[0].x,pts[0].y-.55);
+  for(let i=1;i<pts.length;i++) winShifted.lineTo(pts[i].x,pts[i].y-.55);
+})();
+shell.holes.push(winShifted);
+
+const shellGeo=new THREE.ExtrudeGeometry(shell,{
+  depth:D,bevelEnabled:true,bevelThickness:.07,bevelSize:.07,bevelSegments:3,curveSegments:22
+});
+shellGeo.translate(0,0,-D/2);
+const shellMat=new THREE.MeshPhysicalMaterial({
+  color:0x17120F,roughness:.34,metalness:0,clearcoat:.85,clearcoatRoughness:.22,envMapIntensity:1.1
+});
+tape.add(new THREE.Mesh(shellGeo,shellMat));
+
+// labels
+const labels={};
+['a','b'].forEach((s,i)=>{
+  const geo=new THREE.PlaneGeometry(9.05,2.32);
+  const mat=new THREE.MeshStandardMaterial({map:labelTexture(s),roughness:.92,metalness:0});
+  const m=new THREE.Mesh(geo,mat);
+  m.position.set(0,1.72,(i?-1:1)*(D/2+.075));
+  if(i) m.rotation.y=Math.PI;
+  labels[s]=mat;
+  tape.add(m);
+});
+
+// mechanism
+const brown=new THREE.MeshStandardMaterial({color:0x4A2E1C,roughness:.95});
+const hubMat=new THREE.MeshStandardMaterial({color:0xE8E2D2,roughness:.55});
+const darkMat=new THREE.MeshStandardMaterial({color:0x0B0908,roughness:.8});
+
+const spools=[];
+[-1,1].forEach(dir=>{
+  const g=new THREE.Group();
+  g.position.set(dir*2.28,-.62,0);
+  const pack=new THREE.Mesh(new THREE.CylinderGeometry(1,1,.42,48),brown);
+  pack.rotation.x=Math.PI/2;g.add(pack);
+  const hub=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.66,26),hubMat);
+  hub.rotation.x=Math.PI/2;g.add(hub);
+  for(let i=0;i<6;i++){
+    const t=new THREE.Mesh(new THREE.BoxGeometry(.16,.26,.62),hubMat);
+    t.position.set(Math.cos(i/6*6.283)*.58,Math.sin(i/6*6.283)*.58,0);
+    g.add(t);
+  }
+  tape.add(g);spools.push({g,pack});
+});
+
+const ribbon=new THREE.Mesh(new THREE.BoxGeometry(4.6,.42,.05),brown);
+ribbon.position.set(0,-1.42,.16);tape.add(ribbon);
+
+// head openings + screws on the lower face
+[[-2.9,-2.55,.9],[0,-2.55,1.5],[2.9,-2.55,.9]].forEach(([x,y,w])=>{
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,.85,.5),darkMat);
+  m.position.set(x,y,.42);tape.add(m);
+});
+[[-4.4,2.6],[4.4,2.6],[-4.4,-2.6],[4.4,-2.6],[0,-2.9]].forEach(([x,y])=>{
+  const s=new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,.12,14),darkMat);
+  s.rotation.x=Math.PI/2;s.position.set(x,y,D/2);tape.add(s);
+});
+
+/* ---------- interaction ---------- */
+let targetRY=-.42,targetRX=.2,curRY=-.42,curRX=.2,flipped=0,dist=26;
+let dragging=false,px=0,py=0,vx=0,vy=0;
+
+const el=renderer.domElement;
+el.style.cursor='grab';
+el.style.touchAction='none';
+const clampDist=d=>Math.max(15,Math.min(40,d));
+
+// 多指標追蹤：單指旋轉、雙指 pinch 縮放
+const pointers=new Map();
+let pinchStart=0,pinchDist=dist;
+const pinchGap=()=>{const p=[...pointers.values()];return Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);};
+
+el.addEventListener('pointerdown',e=>{
+  el.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size===1){dragging=true;px=e.clientX;py=e.clientY;el.style.cursor='grabbing';}
+  else if(pointers.size===2){dragging=false;pinchStart=pinchGap();pinchDist=dist;}
+});
+el.addEventListener('pointermove',e=>{
+  if(!pointers.has(e.pointerId))return;
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size>=2){
+    // pinch：兩指距離變大→拉近（dist 變小）
+    const ratio=pinchStart>0?pinchGap()/pinchStart:1;
+    dist=clampDist(pinchDist/ratio);
+    return;
+  }
+  if(!dragging)return;
+  vx=(e.clientX-px)*.006;vy=(e.clientY-py)*.005;
+  targetRY+=vx;targetRX=Math.max(-.9,Math.min(.9,targetRX+vy));
+  px=e.clientX;py=e.clientY;
+});
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size<2)dragging=false;
+  if(pointers.size===1){const p=[...pointers.values()][0];dragging=true;px=p.x;py=p.y;}
+  el.style.cursor='grab';
+}
+el.addEventListener('pointerup',endPointer);
+el.addEventListener('pointercancel',endPointer);
+el.addEventListener('wheel',e=>{e.preventDefault();dist=clampDist(dist+e.deltaY*.02)},{passive:false});
+
+const sideLabel=document.getElementById('sideLabel'),modeEl=document.getElementById('mode');
+document.getElementById('flip').onclick=()=>{
+  flipped^=1;targetRY+=Math.PI;
+  sideLabel.textContent=flipped?'b':'a';
+  modeEl.textContent=flipped?'wet':'dry';
+};
+let playing=false,pos=0;
+const playBtn=document.getElementById('play'),timeEl=document.getElementById('time');
+playBtn.onclick=()=>{playing=!playing;playBtn.dataset.on=playing?'1':'0';playBtn.textContent=playing?'pause':'play'};
+document.getElementById('reset').onclick=()=>{targetRX=.2;targetRY=flipped?Math.PI-.42:-.42;dist=26};
+
+function resize(){
+  const w=innerWidth,h=innerHeight;
+  renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();
+}
+addEventListener('resize',resize);resize();
+
+const clock=new THREE.Clock();
+function frame(){
+  requestAnimationFrame(frame);
+  const dt=Math.min(clock.getDelta(),.05);
+
+  if(playing){
+    pos=Math.min(1,pos+dt/1800*30);   // 30 min tape, sped for the demo
+    if(pos>=1) playing=false;
+  }
+  // reel radii transfer: constant tape volume between the two packs
+  const rMin=.66,rMax=2.06;
+  const area=rMax*rMax-rMin*rMin;
+  const rL=Math.sqrt(rMax*rMax-area*pos);
+  const rR=Math.sqrt(rMin*rMin+area*pos);
+  spools[0].pack.scale.set(rL,1,rL);
+  spools[1].pack.scale.set(rR,1,rR);
+  if(playing && !reduce){
+    spools[0].g.rotation.z-=dt*3.4/rL;
+    spools[1].g.rotation.z-=dt*3.4/rR;
+  }
+  const total=30*60, cur=Math.floor(pos*total);
+  timeEl.textContent=String(Math.floor(cur/60)).padStart(2,'0')+':'+String(cur%60).padStart(2,'0')+' / 30:00';
+
+  if(!dragging && !reduce) targetRY+=dt*.09;
+  curRY+=(targetRY-curRY)*.09;
+  curRX+=(targetRX-curRX)*.09;
+  tape.rotation.y=curRY;
+  tape.rotation.x=curRX;
+  tape.position.y=Math.sin(clock.elapsedTime*.7)*.12;
+  camera.position.z+=(dist-camera.position.z)*.08;
+
+  renderer.render(scene,camera);
+}
+if(document.fonts && document.fonts.ready){ document.fonts.ready.then(()=>{
+  labels.a.map=labelTexture('a');labels.b.map=labelTexture('b');
+  labels.a.needsUpdate=labels.b.needsUpdate=true;
+});}
+frame();
+</script>
