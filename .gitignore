@@ -1,1 +1,6 @@
 .DS_Store
+
+# large model extras not needed by the web page (glb has embedded textures)
+cassette-tape/*.usdz
+cassette-tape/source/
+cassette-tape/textures/

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>cassette (glTF) — SUPERTAPE model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Barlow+Condensed:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --paper:#EDE7D6; --ink:#17120F; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:#D9D2BE;color:var(--ink);font-family:"Barlow Condensed",system-ui,sans-serif;overflow:hidden}
+  #stage{position:fixed;inset:0}
+  canvas{display:block;width:100%;height:100%}
+  .vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 55%,rgba(23,18,15,.2) 100%);mix-blend-mode:multiply}
+
+  header{position:fixed;top:0;left:0;right:0;padding:22px 30px;display:flex;align-items:baseline;gap:14px;z-index:5}
+  h1{font-family:"Archivo Black",sans-serif;font-size:clamp(24px,4vw,42px);letter-spacing:-.03em;margin:0;line-height:.9}
+  .eyebrow{font-size:13px;letter-spacing:.22em;text-transform:uppercase;font-weight:600;color:#C0492E}
+
+  .panel{position:fixed;left:30px;bottom:30px;z-index:5;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{font-family:"Barlow Condensed",sans-serif;font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    padding:9px 18px 8px;border:2.5px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer;
+    transition:transform .12s ease,background .12s ease,color .12s ease}
+  button:hover{background:var(--ink);color:var(--paper)}
+  button:active{transform:translate(2px,2px)}
+  button[data-on="1"]{background:var(--ink);color:var(--paper)}
+
+  .meta{position:fixed;right:30px;bottom:30px;z-index:5;text-align:right;font-size:13px;letter-spacing:.14em;text-transform:uppercase;line-height:1.8}
+  .credit{position:fixed;left:30px;top:74px;z-index:5;font-size:11px;letter-spacing:.06em;max-width:340px;opacity:.75;line-height:1.5}
+  .credit a{color:#0C6B62}
+
+  #loader{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;
+    font-size:15px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink);background:#D9D2BE}
+  #loader b{font-variant-numeric:tabular-nums}
+  @media (max-width:640px){header{padding:16px 18px}.panel{left:18px;bottom:18px}.meta{right:18px;bottom:70px}.credit{left:18px;top:60px}}
+</style>
+
+<div id="stage"></div>
+<div class="vignette"></div>
+
+<header>
+  <h1>supertape</h1>
+  <span class="eyebrow">glTF model · study 06</span>
+</header>
+<div class="credit">
+  Model: “Cassette Tape” — CC BY-SA.
+  <em>Attribution TODO:</em> add author name + source URL here.
+</div>
+
+<div class="panel">
+  <button id="spin" data-on="1">auto-spin</button>
+  <button id="reset">reset view</button>
+</div>
+<div class="meta">
+  <div id="stats">— tris · — verts</div>
+  <div>drag rotate · scroll / pinch zoom</div>
+</div>
+
+<div id="loader">loading model <b id="pct">0%</b></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const stage=document.getElementById('stage');
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+stage.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(30,1,.1,500);camera.position.set(0,.4,22);
+
+// procedural studio env for PBR reflections
+(function(){
+  const c=document.createElement('canvas');c.width=512;c.height=256;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,256);g.addColorStop(0,'#ffffff');g.addColorStop(.5,'#cbc5b6');g.addColorStop(1,'#33302a');
+  x.fillStyle=g;x.fillRect(0,0,512,256);x.fillStyle='#ffffff';x.fillRect(60,26,150,58);x.fillRect(330,36,110,44);
+  const tex=new THREE.CanvasTexture(c);tex.mapping=THREE.EquirectangularReflectionMapping;
+  const pm=new THREE.PMREMGenerator(renderer);scene.environment=pm.fromEquirectangular(tex).texture;
+})();
+
+scene.add(new THREE.HemisphereLight(0xfff5e4,0x4a453d,.7));
+const key=new THREE.DirectionalLight(0xffffff,1.35);key.position.set(6,9,10);scene.add(key);
+const fill=new THREE.DirectionalLight(0xffe4c0,.45);fill.position.set(-9,-2,6);scene.add(fill);
+const rim=new THREE.DirectionalLight(0xbfeee6,.55);rim.position.set(-4,4,-9);scene.add(rim);
+
+const pivot=new THREE.Group();scene.add(pivot);
+const TARGET=11;                 // fit model's largest dimension to this many units
+let model=null;
+
+const loaderEl=document.getElementById('loader'), pctEl=document.getElementById('pct');
+new THREE.GLTFLoader().load('cassette-tape/cassette_tape.glb',
+  gltf=>{
+    model=gltf.scene;
+    const box=new THREE.Box3().setFromObject(model);
+    const size=box.getSize(new THREE.Vector3()), center=box.getCenter(new THREE.Vector3());
+    model.position.sub(center);                     // centre at origin
+    const s=TARGET/Math.max(size.x,size.y,size.z);
+    pivot.scale.setScalar(s);
+    pivot.add(model);
+    // count geometry for the readout
+    let tris=0,verts=0;
+    model.traverse(o=>{if(o.isMesh){const g=o.geometry;verts+=g.attributes.position.count;
+      tris+=g.index?g.index.count/3:g.attributes.position.count/3;}});
+    document.getElementById('stats').textContent=Math.round(tris/1000*10)/10+'k tris · '+verts+' verts';
+    loaderEl.style.display='none';
+  },
+  xhr=>{ if(xhr.lengthComputable) pctEl.textContent=Math.round(xhr.loaded/xhr.total*100)+'%'; },
+  err=>{ loaderEl.innerHTML='failed to load model — check console'; console.error(err); }
+);
+
+/* ---------- interaction (drag / pinch / wheel) ---------- */
+let targetRY=-.5,targetRX=.22,curRY=-.5,curRX=.22,dist=22,autoSpin=true;
+let dragging=false,px=0,py=0;
+const el=renderer.domElement;el.style.cursor='grab';el.style.touchAction='none';
+const clampDist=d=>Math.max(12,Math.min(42,d));
+const pointers=new Map();let pinchStart=0,pinchDist=dist;
+const pinchGap=()=>{const p=[...pointers.values()];return Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);};
+el.addEventListener('pointerdown',e=>{
+  el.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size===1){dragging=true;px=e.clientX;py=e.clientY;el.style.cursor='grabbing';}
+  else if(pointers.size===2){dragging=false;pinchStart=pinchGap();pinchDist=dist;}
+});
+el.addEventListener('pointermove',e=>{
+  if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size>=2){const ratio=pinchStart>0?pinchGap()/pinchStart:1;dist=clampDist(pinchDist/ratio);return;}
+  if(!dragging)return;
+  targetRY+=(e.clientX-px)*.007;targetRX=Math.max(-1.2,Math.min(1.2,targetRX+(e.clientY-py)*.006));
+  px=e.clientX;py=e.clientY;
+});
+function endPointer(e){pointers.delete(e.pointerId);if(pointers.size<2)dragging=false;
+  if(pointers.size===1){const p=[...pointers.values()][0];dragging=true;px=p.x;py=p.y;}el.style.cursor='grab';}
+el.addEventListener('pointerup',endPointer);el.addEventListener('pointercancel',endPointer);
+el.addEventListener('wheel',e=>{e.preventDefault();dist=clampDist(dist+e.deltaY*.02)},{passive:false});
+
+const spinBtn=document.getElementById('spin');
+spinBtn.onclick=()=>{autoSpin=!autoSpin;spinBtn.dataset.on=autoSpin?'1':'0';};
+document.getElementById('reset').onclick=()=>{targetRX=.22;targetRY=-.5;dist=22;};
+
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+const clock=new THREE.Clock();
+function frame(){
+  requestAnimationFrame(frame);
+  const dt=Math.min(clock.getDelta(),.05);
+  if(autoSpin && !dragging && !reduce) targetRY+=dt*.3;
+  curRY+=(targetRY-curRY)*.09;curRX+=(targetRX-curRX)*.09;
+  pivot.rotation.y=curRY;pivot.rotation.x=curRX;
+  pivot.position.y=Math.sin(clock.elapsedTime*.7)*.15;
+  camera.position.z+=(dist-camera.position.z)*.08;
+  renderer.render(scene,camera);
+}
+frame();
+</script>
